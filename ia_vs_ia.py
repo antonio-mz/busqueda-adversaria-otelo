@@ -37,8 +37,10 @@ for i in tqdm(range(partidas)):
                 print("Las blancas ganan la partida")
             print("Las negras han conseguido: ", negras)
             print("Las blancas han conseguido: ", blancas)
-            for fila in partida_actual:
-                df_estados_partidas = pd.concat([df_estados_partidas, pd.DataFrame([fila])], ignore_index=True)
+            # Todas las posiciones de la partida se etiquetan con el ganador FINAL
+            # (antes se guardaba quién iba ganando en cada jugada, que no es lo que la red debe aprender).
+            filas = [crear_fila(estado, t, ganador) for estado, t in partida_actual]
+            df_estados_partidas = pd.concat([df_estados_partidas, pd.DataFrame(filas)], ignore_index=True)
             break
 
 
@@ -53,10 +55,8 @@ for i in tqdm(range(partidas)):
 
         otelo.poner_ficha(tablero, movimiento[0], movimiento[1], turno)
 
-        ganador, blancas, negras = otelo.ganador(tablero)
-
-        nueva_fila = crear_fila(tablero, turno, ganador)
-        partida_actual.append(nueva_fila)
+        # La etiqueta se pone al terminar la partida: aquí solo se guarda el estado.
+        partida_actual.append((tablero.copy(), turno))
         
         turno = 3 - turno
 

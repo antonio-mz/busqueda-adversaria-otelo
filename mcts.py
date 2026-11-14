@@ -25,13 +25,20 @@ def mcts_uct(tablero, turno, iteraciones=100, red_neuronal = False):
     raiz = Nodo(tablero, turno)
     for i in range(0, iteraciones):
         nuevo_nodo = seleccion(raiz)
+        # simula/simula_red devuelven el resultado desde el punto de vista del jugador
+        # al que le toca mover en el nodo. Cada nodo guarda su recompensa desde el punto
+        # de vista del jugador que hizo el movimiento que lleva a él (el rival), por eso
+        # se cambia el signo antes de retropropagar.
         if red_neuronal == True:
-            res_simulacion = simula_red(nuevo_nodo.estado, nuevo_nodo.turno)
+            res_simulacion = -simula_red(nuevo_nodo.estado, nuevo_nodo.turno)
         elif red_neuronal == False:
-            res_simulacion = simula(nuevo_nodo.estado, nuevo_nodo.turno)
+            res_simulacion = -simula(nuevo_nodo.estado, nuevo_nodo.turno)
         retropropaga(nuevo_nodo, res_simulacion)
 
-    return mejor_sucesor_uct(raiz).accion
+    # La jugada final es la del hijo más visitado (la más robusta), sin término de exploración.
+    if not raiz.hijos:
+        return None
+    return max(raiz.hijos, key=lambda h: h.n_visitas).accion
 
 def seleccion(nodo):
     if not otelo.jugador_puede_mover(nodo.estado, 1) and not otelo.jugador_puede_mover(nodo.estado, 2):
@@ -55,7 +62,6 @@ def expande(nodo):
             otelo.poner_ficha(nuevo_tablero, accion[0], accion[1], nodo.turno)
             nodo.acciones_hechas.append(accion)
             nuevo_nodo = Nodo(nuevo_tablero, padre= nodo, turno= 3-nodo.turno, accion=accion)
-            nuevo_nodo.n_visitas += 1
             nodo.hijos.append(nuevo_nodo)
             return nuevo_nodo
 
@@ -64,8 +70,7 @@ def mejor_sucesor_uct(nodo):
     c_p = 1.4142
     n_s0 = nodo.n_visitas
     uct_hijos = []
-    posicion = 0
-    for hijo in nodo.hijos:
+    for posicion, hijo in enumerate(nodo.hijos):
         q_s = hijo.r_acum
         n_s = hijo.n_visitas
         uct = (q_s/n_s) + 2*c_p*math.sqrt(math.log(n_s0)/n_s)
@@ -128,4 +133,6 @@ def representar_tablero_para_red(tablero, turno):
 def simula_red(tablero, turno):
     entrada = representar_tablero_para_red(tablero, turno)
     prediccion = red_otelo.predict(np.array([entrada]), verbose=0)[0][0]
-    return prediccion
+    # La red predice desde el punto de vista de las blancas (+1 ganan blancas, -1 ganan negras).
+    # Se convierte al punto de vista del jugador al que le toca mover, como hace simula().
+    return float(prediccion) if turno == 2 else -float(prediccion)
