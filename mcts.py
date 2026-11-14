@@ -2,9 +2,17 @@ import random
 import numpy as np
 import math
 import otelo
-from keras.models import load_model
+_red_otelo = None
 
-red_otelo = load_model("red_otelo.h5")
+
+def cargar_red():
+    # Carga perezosa: TensorFlow solo se importa si se usa la red. Así los procesos
+    # que generan datos con simulaciones aleatorias no cargan TensorFlow.
+    global _red_otelo
+    if _red_otelo is None:
+        from keras.models import load_model
+        _red_otelo = load_model("red_otelo.h5")
+    return _red_otelo
 
 class Nodo:
     def __init__(self, tablero, turno, padre=None, accion = None):
@@ -132,7 +140,7 @@ def representar_tablero_para_red(tablero, turno):
 
 def simula_red(tablero, turno):
     entrada = representar_tablero_para_red(tablero, turno)
-    prediccion = red_otelo.predict(np.array([entrada]), verbose=0)[0][0]
+    prediccion = cargar_red().predict(np.array([entrada]), verbose=0)[0][0]
     # La red predice desde el punto de vista de las blancas (+1 ganan blancas, -1 ganan negras).
     # Se convierte al punto de vista del jugador al que le toca mover, como hace simula().
     return float(prediccion) if turno == 2 else -float(prediccion)
