@@ -2,17 +2,42 @@ import random
 import numpy as np
 import math
 import otelo
-_red_otelo = None
+_pesos_red = None
+
+
+def extraer_pesos(ruta="red_otelo.h5"):
+    """Load the Keras model and return its Dense layers as (kernel, bias) pairs."""
+    from keras.models import load_model
+    red = load_model(ruta, compile=False)
+    return [tuple(capa.get_weights()) for capa in red.layers]
+
+
+def usar_pesos(pesos):
+    """Set the network weights directly (worker processes get them without TensorFlow)."""
+    global _pesos_red
+    _pesos_red = pesos
 
 
 def cargar_red():
     # Carga perezosa: TensorFlow solo se importa si se usa la red. Así los procesos
     # que generan datos con simulaciones aleatorias no cargan TensorFlow.
-    global _red_otelo
-    if _red_otelo is None:
-        from keras.models import load_model
-        _red_otelo = load_model("red_otelo.h5")
-    return _red_otelo
+    global _pesos_red
+    if _pesos_red is None:
+        _pesos_red = extraer_pesos()
+    return _pesos_red
+
+
+def evaluar_red(entrada):
+    """Forward pass of the Dense network in numpy (ReLU hidden layers, tanh output).
+
+    Same result as Keras predict() for one position, without its per-call overhead.
+    """
+    x = np.asarray(entrada, dtype=np.float32)
+    pesos = cargar_red()
+    for kernel, bias in pesos[:-1]:
+        x = np.maximum(x @ kernel + bias, 0.0)
+    kernel, bias = pesos[-1]
+    return float(np.tanh(x @ kernel + bias)[0])
 
 class Nodo:
     def __init__(self, tablero, turno, padre=None, accion = None):
@@ -139,8 +164,10 @@ def representar_tablero_para_red(tablero, turno):
     return entrada
 
 def simula_red(tablero, turno):
-    entrada = representar_tablero_para_red(tablero, turno)
-    prediccion = cargar_red().predict(np.array([entrada]), verbose=0)[0][0]
+    # `turno` is the player to move, but the network was trained with the player who
+    # made the last move (generar_datos.py stores the mover), so it gets 3 - turno.
+    entrada = representar_tablero_para_red(tablero, 3 - turno)
+    prediccion = evaluar_red(entrada)
     # La red predice desde el punto de vista de las blancas (+1 ganan blancas, -1 ganan negras).
     # Se convierte al punto de vista del jugador al que le toca mover, como hace simula().
-    return float(prediccion) if turno == 2 else -float(prediccion)
+    return prediccion if turno == 2 else -prediccion
